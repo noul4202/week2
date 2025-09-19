@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Message </title>
+    </head>
+    <body>
+        <script>
+            var rand = [myName(), myMajor(), myUniv()];
+
+            function myName() {
+                return `my name is bamminjun`;
+            }
+
+            function myMajor() {
+                return `my major is comedu`;
+            }
+
+            function myUniv() {
+                return `my univ is jnu`;
+
+            }
+
+            function randomFunction() {
+                return Math.floor(Math.random() * 3);
+            }
+
+            setInterval(function() {
+                    document.body.innerHTML = "";
+                    const message = rand[randomFunction()];
+                    document.write(message);
+                },
+                3000
+            );
+
+        </script>
+    </body>
+</html>
