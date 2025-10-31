@@ -1,0 +1,26 @@
+body{
+    display:flex;
+    flex-direction: column;
+    align-items: center;
+    background-image: url(https://png.pngtree.com/thumb_back/fh260/background/20240625/pngtree-new-halloween-4k-wallpaper-hd-pumpkin-celebration-spooky-image_15923216.jpg);
+    background-size: contain;
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+.highlight {
+ background-color: yellow;
+}
+.error {
+ background-color: lightcoral;
+ border: red;
+}
+.disabled {
+ opacity: 0.5;
+ cursor: not-allowed;
+}
+.orange {
+ color: orange;
+}
+.white {
+ color: white;
+}
