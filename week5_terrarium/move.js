@@ -2,39 +2,44 @@ let maxZIndex = 1;
 
 function dragElement(terrariumElement) {
   let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+  let initialX = 0, initialY = 0;
+
   terrariumElement.ondblclick = bringFront;
-  terrariumElement.onpointerdown = pointerDrag;
-  function pointerDrag(e) {
-    e.preventDefault();
-    console.log(e);
-    pos3 = e.clientX;
-    pos4 = e.clientY;
-    document.onpointermove = elementDrag;
+
+  terrariumElement.ondragstart = dragStart;
+  terrariumElement.setAttribute('draggable', true);
+  terrariumElement.ondragend = stopDrag;
+
+  function dragStart(e) {
+    e.dataTransfer.setData('text/plain', e.target.id);
+    
     maxZIndex++;
     terrariumElement.style.zIndex = maxZIndex;
-    document.onpointerup = stopElementDrag;
+
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    initialX = terrariumElement.offsetLeft;
+    initialY = terrariumElement.offsetTop;
+    
     }
 
-    function elementDrag(e) {
-        pos1 = pos3 - e.clientX;
-        pos2 = pos4 - e.clientY;
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        console.log(pos1, pos2, pos3, pos4);
-        terrariumElement.style.top = terrariumElement.offsetTop - pos2 + 'px';
-        terrariumElement.style.left = terrariumElement.offsetLeft - pos1 + 'px';
+    function stopDrag(e) {
+        const deltaX = e.clientX - pos3;
+        const deltaY = e.clientY - pos4;
+        terrariumElement.style.left = (initialX + deltaX) + "px";
+        terrariumElement.style.top = (initialY + deltaY) + "px";
+
+        document.ondragover = null;
     }
 
-    function stopElementDrag() {
-        document.onpointerup = null;
-        document.onpointermove = null;
+    document.body.ondragover = function(e) {
+        e.preventDefault();
     }
 
     function bringFront() {
         maxZIndex++;
         terrariumElement.style.zIndex = maxZIndex;
     }
-
 }
 
 dragElement(document.getElementById('plant1'));
@@ -51,4 +56,3 @@ dragElement(document.getElementById('plant11'));
 dragElement(document.getElementById('plant12'));
 dragElement(document.getElementById('plant13'));
 dragElement(document.getElementById('plant14'));
-
