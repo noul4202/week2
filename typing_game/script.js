@@ -17,6 +17,31 @@ const messageElement = document.getElementById('message');
 const typedValueElement = document.getElementById('typed-value');
 const startButton = document.getElementById('start');
 const inputField = document.getElementById('typed-value');
+const modalBestScore = document.getElementById('modal-best-score');
+const modalCurrentScore = document.getElementById('modal-current-score');
+const modalCloseButton = document.getElementById('modal-close-button');
+
+const modalContainer =  document.getElementById('modal-container');
+
+showModal = (currentScore) => {
+    let bestScore = localStorage.getItem('typingGameBestScore');
+
+    if(currentScore < parseFloat(bestScore) || bestScore === null) {
+        localStorage.setItem('typingGameBestScore', currentScore);
+        bestScore = currentScore;
+    }
+
+    startButton.disabled = false;
+    startButton.classList.remove('disabled-style');
+    inputField.disabled = true;
+    inputField.classList.add('disabled-style');
+
+    modalBestScore.innerHTML = 'Best score: ' + bestScore;
+    modalCurrentScore.innerHTML = 'Your score: ' + currentScore;
+
+    quoteElement.style.fontSize = '20px';
+    modalContainer.classList.remove('hidden');
+};
 
 document.getElementById('start').addEventListener('click',() => {
     const quoteIndex = Math.floor(Math.random() * quotes.length);
@@ -41,12 +66,15 @@ typedValueElement.addEventListener('input', () => {
     const typedValue = typedValueElement.value;
     if (typedValue === currentWord && wordIndex === words.length - 1) {
         const elapsedTime = new Date().getTime() - startTime;
-        const message = `CONGRATULATIONS! You finished in ${elapsedTime / 1000} seconds.`;
-        messageElement.innerText = message;
-        startButton.disabled = false;
-        startButton.classList.remove('disabled-style');
-        inputField.disabled = true;
-        inputField.classList.add('disabled-style');
+        const currentScore = (elapsedTime / 1000);
+
+        const bestScore = localStorage.getItem('typingGameBestScore');
+        if(bestScore === null || currentScore < parseFloat(bestScore)) {
+            localStorage.setItem('typingGameBestScore', currentScore);
+        }
+
+        showModal(currentScore);
+
     } else if (typedValue.endsWith(' ') && typedValue.trim() === currentWord) { //
         typedValueElement.value = '';
         wordIndex++;
@@ -54,9 +82,23 @@ typedValueElement.addEventListener('input', () => {
         wordElement.className = '';
         }
         quoteElement.childNodes[wordIndex].className = 'highlight';
+        quoteElement.style.fontSize = '20px';
     } else if (currentWord.startsWith(typedValue)) {
         typedValueElement.className = '';
     } else {
         typedValueElement.className = 'error';
     }
+});
+
+typedValueElement.addEventListener('input', () => {
+    const currentSizeStr = window.getComputedStyle(quoteElement).fontSize;
+    const currentSize = parseFloat(currentSizeStr);
+
+    const newSize = currentSize + 1;
+
+    quoteElement.style.fontSize = newSize + 'px';
+}); 
+
+modalCloseButton.addEventListener('click', () => {
+    modalContainer.classList.add('hidden');
 });
