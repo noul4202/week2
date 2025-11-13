@@ -1,0 +1,1 @@
+(()=>{const t=document.getElementById("duckIsComming"),e=document.getElementById("realDuck");!async function(){try{const n=await fetch("https://random-d.uk/api/random"),o=(await n.json()).url;e.src=o,e.onload=()=>{e.style.display="block",t.style.display="none"},e.onerror=()=>{t.textContent="Failed to load duck image."}}catch(e){t.textContent="Error fetching duck image."}}()})();
