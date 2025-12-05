@@ -16,20 +16,13 @@ window.onload = async() => {
     enemyImg = await loadTexture('assets/enemyShip.png');
     laserImg = await loadTexture('assets/laserRed.png');
     boomImg = await loadTexture('assets/laserRedShot.png');
+    lifeImg = await loadTexture('assets/life.png');
 
     initGame();
-    let gameLoopId = setInterval(() => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        drawGameObjects(ctx);
-        updateGameObjects();
-    }, 100)
-
 };
 
 function createEnemies() {
-    const MONSTER_TOTAL = 5;
+    const MONSTER_TOTAL = stage;
     const MONSTER_WIDTH = MONSTER_TOTAL * 98;
     const START_X = (canvas.width - MONSTER_WIDTH) / 2;
     const STOP_X = START_X + MONSTER_WIDTH;
@@ -68,10 +61,15 @@ let gameLoopId = setInterval(() => {
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 게임 객체 그리기
-    //drawHero(); // 플레이어 캐릭터
-    //drawEnemies(); // 적들
-    //drawStaticObjects(); // 배경과 같은 정적인 요소
+    if(isStageClear) {
+        displayMessage(`Now.. Stage ${stage+1} get ready!!`);
+        return;
+    } else {
+        drawGameObjects(ctx);
+        updateGameObjects();
+        drawPoints();
+        drawLife();
+    }
 }, 200);
 
 class GameObject {
@@ -106,6 +104,8 @@ class Hero extends GameObject {
         this.type = 'Hero';
         this.speed = { x: 0, y: 0 };
         this.cooldown = 0;
+        this.life = 3;
+        this.points = 0;
     }
     fire() {
         if (this.canFire()) {
@@ -122,6 +122,16 @@ class Hero extends GameObject {
     }
     canFire() {
         return this.cooldown === 0; // 쿨다운이 끝났는지 확인
+    }
+    decrementLife() {
+        this.life--;
+        if (this.life <= 0) {
+            this.dead = true;
+        }
+    }
+
+    incrementPoints() {
+        this.points += 100;
     }
 }
 
@@ -184,7 +194,9 @@ window.addEventListener("keyup", (evt) => {
     } else if (evt.key === "ArrowRight") {
         eventEmitter.emit(Messages.KEY_EVENT_RIGHT);
     } else if (evt.keyCode === 32) { // 스페이스바
-    eventEmitter.emit(Messages.KEY_EVENT_SPACE);
+        eventEmitter.emit(Messages.KEY_EVENT_SPACE);
+    } else if (evt.key === "Enter") {
+        eventEmitter.emit(Messages.KEY_EVENT_ENTER);
     }
 });
 
@@ -203,6 +215,9 @@ class EventEmitter {
             this.listeners[message].forEach((l) => l(message, payload));
         }
     }
+    clear() {
+        this.listeners = {};
+    }
 }
 
 const Messages = {
@@ -213,6 +228,9 @@ const Messages = {
     KEY_EVENT_SPACE: "KEY_EVENT_SPACE",
     COLLISION_ENEMY_LASER: "COLLISION_ENEMY_LASER",
     COLLISION_ENEMY_HERO: "COLLISION_ENEMY_HERO",
+    GAME_END_LOSS: "GAME_END_LOSS",
+    GAME_END_WIN: "GAME_END_WIN",
+    KEY_EVENT_ENTER: "KEY_EVENT_ENTER",
 };
 
 let heroImg,
@@ -222,9 +240,19 @@ let heroImg,
  canvas, ctx,
  gameObjects = [],
  hero,
+ lifeImg,
+ isStageClear = false,
+ stage=1,
  eventEmitter = new EventEmitter();
 
 function initGame() {
+    //이전단계의 subHero의 발사타이머 멈춤
+    gameObjects.forEach((go) => {
+        if (go.type === "SubHero" && go.fireInterval) {
+            clearInterval(go.fireInterval);
+        }
+    });
+
     gameObjects = [];
     createEnemies();
     createHero();
@@ -265,6 +293,54 @@ function initGame() {
 
         const explosion = new boom(second.x, second.y);
         gameObjects.push(explosion);
+    });
+
+    eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
+        first.dead = true;
+        second.dead = true;
+        hero.incrementPoints();
+
+        if (isEnemiesDead()) {
+            const MAXIMUM_stage = 5;
+            if(stage >= MAXIMUM_stage){
+                eventEmitter.emit(Messages.GAME_END_WIN);
+            } else {
+                isStageClear = true;
+            }
+        }
+    })
+
+    eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
+        enemy.dead = true;
+        hero.decrementLife();
+        if (isHeroDead()) {
+            eventEmitter.emit(Messages.GAME_END_LOSS);
+            return; // loss before victory
+        }
+        if (isEnemiesDead()) {const MAXIMUM_stage = 5;
+            if(stage >= MAXIMUM_stage) {
+                eventEmitter.emit(Messages.GAME_END_WIN);
+                return;
+            }
+            else
+                nextStage();
+        }
+    });
+
+    eventEmitter.on(Messages.GAME_END_WIN, () => {
+        endGame(true);
+    });
+
+    eventEmitter.on(Messages.GAME_END_LOSS, () => {
+        endGame(false);
+    });
+
+    eventEmitter.on(Messages.KEY_EVENT_ENTER, () => {
+        if(isStageClear){
+            nextStage();
+        } else {
+            resetGame();
+        }
     });
 }
 
@@ -325,6 +401,98 @@ function updateGameObjects() {
             }
         });
     });
+
+    enemies.forEach(enemy => {
+        const heroRect = hero.rectFromGameObject();
+        if (intersectRect(heroRect, enemy.rectFromGameObject())) {
+            eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, { enemy });
+        }
+    })
+
     // 죽은 객체 제거
     gameObjects = gameObjects.filter(go => !go.dead);
+}
+
+function drawLife() {
+    const START_POS = canvas.width - 180;
+    for(let i=0; i < hero.life; i++ ) {
+        ctx.drawImage(
+            lifeImg,
+            START_POS + (45 * (i+1) ),
+            canvas.height - 37);
+    }
+}
+
+function drawPoints() {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "red";
+    ctx.textAlign = "left";
+    drawText("Points: " + hero.points, 10, canvas.height-20);
+}
+
+function drawText(message, x, y) {
+    ctx.fillText(message, x, y);    
+}
+
+function isHeroDead() {
+    return hero.life <= 0;
+}
+
+function isEnemiesDead() {
+    const enemies = gameObjects.filter((go) => go.type === "Enemy" && !go.dead);
+    return enemies.length === 0;
+}
+
+function displayMessage(message, color = "red") {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+    }
+
+function endGame(win) {
+    clearInterval(gameLoopId);
+    setTimeout(() => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (win) {
+            displayMessage(
+                "Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew",
+                "green"
+            );
+            } else {
+                displayMessage(
+                    "You died !!! Press [Enter] to start a new game Captain Pew Pew"
+            );
+        }
+    }, 200)
+}
+
+function resetGame() {
+    if (gameLoopId) {
+        stage = 1; // 스테이지 초기화
+        clearInterval(gameLoopId); // 게임 루프 중지, 중복 실행 방지
+        eventEmitter.clear(); // 모든 이벤트 리스너 제거, 이전 게임 세션 충돌 방지
+        initGame(); // 게임 초기 상태 실행
+        isStageClear = false;
+        gameLoopId = setInterval(() => { // 100ms 간격으로 새로운 게임 루프 시작
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawPoints();
+            drawLife();
+            updateGameObjects();
+            drawGameObjects(ctx);
+        }, 100);
+    }
+}
+
+function nextStage() {
+    stage++;
+    isStageClear = false;
+
+    gameObjects = gameObjects.filter((go) => go.type === "Hero" || go.type === "SubHero");
+
+    createEnemies();
 }
