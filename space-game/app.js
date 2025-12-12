@@ -17,6 +17,9 @@ window.onload = async() => {
     laserImg = await loadTexture('assets/laserRed.png');
     boomImg = await loadTexture('assets/laserRedShot.png');
     lifeImg = await loadTexture('assets/life.png');
+    bossImg = await loadTexture('assets/enemyUFO.png');
+    enemylaser = await loadTexture('assets/laserGreen.png');
+    heroboomImg = await loadTexture('assets/laserGreenShot.png');
 
     initGame();
 };
@@ -27,11 +30,17 @@ function createEnemies() {
     const START_X = (canvas.width - MONSTER_WIDTH) / 2;
     const STOP_X = START_X + MONSTER_WIDTH;
 
-    for (let x = START_X; x < STOP_X; x += 98) {
-        for (let y = 0; y < 50 * 5; y += 50) {
-            const enemy = new Enemy(x, y);
-            enemy.img = enemyImg;
-            gameObjects.push(enemy);
+    if(stage == 5){
+        const boss = new EnemyBoss(canvas.width / 2 - 150, 10);
+        gameObjects.push(boss);
+    }
+    else{
+        for (let x = START_X; x < STOP_X; x += 98) {
+            for (let y = 0; y < 50 * 5; y += 50) {
+                const enemy = new Enemy(x, y);
+                enemy.img = enemyImg;
+                gameObjects.push(enemy);
+            }
         }
     }
 }
@@ -167,6 +176,67 @@ class Enemy extends GameObject {
     }
 }
 
+class EnemyBoss extends GameObject {
+    constructor(x, y) {
+        super(x, y);
+        this.width = 300;
+        this.height = 300;
+        this.type = "Enemy";
+        this.img = bossImg;
+        this.hp=30;
+
+        let direction = 1;
+        this.moveInterval = setInterval(() => {
+            if (this.x + this.width >= canvas.width) {
+                direction = -1; // 왼쪽으로 이동
+            } else if (this.x <= 0) {
+                direction = 1; // 오른쪽으로 이동
+            }
+            this.x += direction * 3; // 속도 조절
+        }, 100);
+        this.fireInterval = setInterval(() => {
+            if (this.dead) {
+                clearInterval(this.fireInterval);
+                return;
+            }
+            const laser = new EnemyLaser(this.x + this.width / 2 - 5, this.y + this.height - 50);
+            gameObjects.push(laser);
+        }, 1000);
+    }
+}
+
+class EnemyLaser extends GameObject {
+    constructor(x, y) {
+        super(x, y);
+        this.width = 10;
+        this.height = 33;
+        this.type = "EnemyLaser";
+        this.img = enemylaser;
+
+        let id = setInterval(() => {
+            if (this.y < canvas.height) {
+                this.y += 10; // 아래로 이동
+            } else {
+                this.dead = true; // 화면 하단에 도달하면 제거
+                clearInterval(id);
+            }
+        }, 100);
+    }
+}
+
+class heroBoom extends GameObject {
+    constructor(x, y) {
+        super(x, y);
+        this.width = 80;
+        this.height = 80;
+        this.type = "boom";
+        this.img = heroboomImg;
+        setTimeout(() => {
+            this.dead = true; // 폭발 애니메이션 후 제거
+        }, 300);
+    }
+}
+
 let onKeyDown = function (e) {
         console.log(e.keyCode); // 눌린 키의 keyCode를 출력
         switch (e.keyCode) {
@@ -228,6 +298,7 @@ const Messages = {
     KEY_EVENT_SPACE: "KEY_EVENT_SPACE",
     COLLISION_ENEMY_LASER: "COLLISION_ENEMY_LASER",
     COLLISION_ENEMY_HERO: "COLLISION_ENEMY_HERO",
+    COLLISION_HERO_LASER: "COLLISION_HERO_LASER",
     GAME_END_LOSS: "GAME_END_LOSS",
     GAME_END_WIN: "GAME_END_WIN",
     KEY_EVENT_ENTER: "KEY_EVENT_ENTER",
@@ -237,6 +308,9 @@ let heroImg,
  enemyImg,
  laserImg,
  boomImg,
+ bossImg,
+ enemylaser,
+ heroboomImg,
  canvas, ctx,
  gameObjects = [],
  hero,
@@ -256,6 +330,17 @@ function initGame() {
     gameObjects = [];
     createEnemies();
     createHero();
+
+    eventEmitter.on(Messages.COLLISION_HERO_LASER, (_, { laser }) => {
+        laser.dead = true;
+        hero.decrementLife();
+
+        gameObjects.push(new heroBoom(laser.x - 15, laser.y - 40));
+
+        if(isHeroDead()) {
+            eventEmitter.emit(Messages.GAME_END_LOSS);
+        }
+    });
 
     eventEmitter.on(Messages.KEY_EVENT_UP, () => {
         hero.y -=5 ;
@@ -289,16 +374,21 @@ function initGame() {
 
     eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
         first.dead = true;
-        second.dead = true;
 
-        const explosion = new boom(second.x, second.y);
+        const explosion = new boom((second.x + second.width / 2)-40, (second.y + second.height / 2)-40);
         gameObjects.push(explosion);
-    });
 
-    eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
-        first.dead = true;
-        second.dead = true;
-        hero.incrementPoints();
+        if(second.hp){
+            second.hp -= 1;
+            if(second.hp <= 0){
+                second.dead = true;
+                hero.incrementPoints();
+            }
+        }
+        else{
+            second.dead = true;
+            hero.incrementPoints();
+        }
 
         if (isEnemiesDead()) {
             const MAXIMUM_stage = 5;
@@ -308,7 +398,7 @@ function initGame() {
                 isStageClear = true;
             }
         }
-    })
+    });
 
     eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
         enemy.dead = true;
@@ -382,14 +472,10 @@ class boom extends GameObject {
     }
 }
 
-eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
-    first.dead = true; // 레이저 제거
-    second.dead = true; // 적 제거
-});
-
 function updateGameObjects() {
     const enemies = gameObjects.filter(go => go.type === 'Enemy');
     const lasers = gameObjects.filter((go) => go.type === "Laser");
+    const enemylasers = gameObjects.filter((go) => go.type === "EnemyLaser");
 
     lasers.forEach((l) => {
         enemies.forEach((m) => {
@@ -408,6 +494,12 @@ function updateGameObjects() {
             eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, { enemy });
         }
     })
+
+    enemylasers.forEach((l) => {
+        if (intersectRect(l.rectFromGameObject(), hero.rectFromGameObject())) {
+            eventEmitter.emit(Messages.COLLISION_HERO_LASER, { laser: l });
+        }
+    });
 
     // 죽은 객체 제거
     gameObjects = gameObjects.filter(go => !go.dead);
@@ -474,8 +566,16 @@ function resetGame() {
         stage = 1; // 스테이지 초기화
         clearInterval(gameLoopId); // 게임 루프 중지, 중복 실행 방지
         eventEmitter.clear(); // 모든 이벤트 리스너 제거, 이전 게임 세션 충돌 방지
+
+        gameObjects.forEach((go) => {
+            if (go.type === "SubHero" && go.fireInterval) {
+                clearInterval(go.fireInterval);
+            }
+        });
+
         initGame(); // 게임 초기 상태 실행
         isStageClear = false;
+
         gameLoopId = setInterval(() => { // 100ms 간격으로 새로운 게임 루프 시작
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "black";
